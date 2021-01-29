@@ -1,0 +1,155 @@
+package main
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"io"
+	"monitor-back_end/utils"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"time"
+)
+
+type ErrLogStore struct {
+	Ip         string                 `json:"ip"`
+	Ua         string                 `json:"ua"`
+	Fronterror map[string]interface{} `json:"fronterror"`
+}
+
+func main() {
+	// 添加日志
+	sugarLogger := utils.InitLogger()
+	defer sugarLogger.Sync()
+
+
+	r := gin.Default()
+	r.Use(Cors())
+	// 为 multipart forms 设置较低的内存限制 (默认是 32 MiB)
+	r.MaxMultipartMemory = 8 << 20  // 8 MiB
+	r.GET("/monitor/error", func(c *gin.Context) {
+
+		ip := c.ClientIP()
+		ua := c.GetHeader("User-Agent")
+
+		info := c.Query("info")
+		//base64解码
+		decodeBytes, err := base64.StdEncoding.DecodeString(info)
+		if err != nil {
+			fmt.Errorf("%s", err)
+		}
+		// 前端decodeURIComponent
+		tmp, err := url.QueryUnescape(string(decodeBytes))
+		if err != nil {
+			fmt.Println("err = ", err)
+			return
+		}
+
+		var fronterror map[string]interface{}
+		if err := json.Unmarshal([]byte(tmp), &fronterror); err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		els := ErrLogStore{ip, ua, fronterror}
+		buf, err := JSONMarshal(els)
+		if err != nil {
+			fmt.Println("err = ", err)
+			return
+		}
+
+		//var ttt map[string]interface{}
+		//if err := json.Unmarshal(buf,&ttt); err != nil {
+		//	fmt.Println(err)
+		//	return
+		//}
+		//fmt.Println("ttt",ttt)
+
+		sugarLogger.Error(string(buf))
+	})
+
+	r.GET("/removeDir", func(c *gin.Context) {
+		projectName := c.Query("projectName")
+		curPath,_ := filepath.Abs("./")
+		dirPath := path.Join(curPath, projectName)
+		os.RemoveAll(dirPath)
+	})
+
+	r.POST("/monitor/sourcemap", func(c *gin.Context) {
+		fileName := c.Query("name")
+		projectName := c.Query("projectName")
+		curPath,_ := filepath.Abs("./")
+		dirPath := path.Join(curPath, projectName)
+		os.Mkdir(dirPath,0666)
+
+		target := path.Join(dirPath,fileName)
+		src := c.Request.Body
+
+		//目标文件
+		dest, err2 := os.OpenFile(target, os.O_RDWR|os.O_CREATE, os.ModePerm)
+		if err2 != nil {
+			fmt.Println(err2)
+		}
+		//使用结束关闭文件
+		defer dest.Close()
+		io.Copy(dest,src)
+
+	})
+
+	r.GET("/api/js", func(c *gin.Context) {
+		appid:=c.Query(("appid"))
+	//	TODO 验证appid是否正确和读取配置，失败的时候需要返回window.monitor的方法防止报错
+	fmt.Println("appid",appid)
+		curPath,_ := filepath.Abs("./static/monitor.js")
+		time.Sleep(4*time.Second)
+		c.File(curPath)
+
+	})
+
+
+	r.Run() // 监听并在 0.0.0.0:8080 上启动服务
+}
+
+// 对象换字符串，不转义
+func JSONMarshal(t interface{}) ([]byte, error) {
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(t)
+	return buffer.Bytes(), err
+}
+
+// 转义后前端转成json对象比较麻烦，后端则是一步到位 json.Unmarshal
+
+// 前端需要先把\去掉，msg的冒号去掉，\n去掉
+
+func CleanAndMkdir(name string)  {
+	if _,err := os.Stat(name); os.IsExist(err) {
+		return
+	}
+	//os.RemoveAll(name)
+	//os.Mkdir(name,0666)
+}
+
+
+// test
+
+func Cors() gin.HandlerFunc {
+	return func(context *gin.Context) {
+		method := context.Request.Method
+		context.Header("Access-Control-Allow-Origin", "*")
+		context.Header("Access-Control-Allow-Headers", "Content-Type,AccessToken,X-CSRF-Token, Authorization, Token")
+		context.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		context.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Content-Type")
+		context.Header("Access-Control-Allow-Credentials", "true")
+		if method == "OPTIONS" {
+			context.AbortWithStatus(http.StatusNoContent)
+		}
+		context.Next()
+	}
+}
