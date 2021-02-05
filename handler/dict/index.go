@@ -11,9 +11,13 @@ func CreateDict(c *gin.Context) {
 	var form CreateDictRequest
 	if err := c.ShouldBindJSON(&form); err != nil {
 		handler.SendResponse(c, errno.ErrBind, nil)
+		return
 	}
 
-	service.CreateDict(form.Name, form.Value)
+	if err := service.CreateDict(form.Name, form.Value); err != nil {
+		handler.SendResponse(c, errno.ErrDatabase, nil)
+		return
+	}
 	//fmt.Println(service.CreateDict)
-
+	handler.SendResponse(c, nil, nil)
 }

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func CreateDict(name string, value string) {
+func CreateDict(name string, value string) error {
 	id := model.GetIncreaseId(viper.GetString("db.name"), "dict")
 
 	time := time.Now()
@@ -18,5 +18,9 @@ func CreateDict(name string, value string) {
 		time,
 	}
 
-	u.CreateDict()
+	if err := u.CreateDict(); err != nil {
+		return err
+	}
+
+	return nil
 }
