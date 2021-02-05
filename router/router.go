@@ -30,7 +30,7 @@ func Load(g *gin.Engine, mw ...gin.HandlerFunc) *gin.Engine {
 	{
 		dictRouter := v1.Group("/dict")
 		{
-			//dictRouter.GET("getDictList")
+			dictRouter.GET("getDictList", dict.GetDictList)
 			dictRouter.POST("createDict", dict.CreateDict)
 		}
 	}

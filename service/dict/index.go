@@ -24,3 +24,7 @@ func CreateDict(name string, value string) error {
 
 	return nil
 }
+
+func GetDictList() {
+
+}
